@@ -1,6 +1,7 @@
-run = "streamlit run app.py"
+run = "streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"
 language = "python3"
 hidden = [".venv", "__pycache__", "*.pyc", ".git", "data_raw e.json"]
+modules = ["python-3.12", "nix"]
 entrypoint = "app.py"
 
 [env]
@@ -8,6 +9,7 @@ PYTHONUNBUFFERED = "1"
 
 [nix]
 enabled = true
+channel = "stable-24_05"
 
 [packager]
 language = "python3"
@@ -26,3 +28,19 @@ syntax = "python"
 
 [languages.python3.languageServer]
 start = "pylsp" 
+
+[deployment]
+run = ["sh", "-c", "streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"]
+
+[workflows]
+runButton = "Streamlit"
+
+[[workflows.workflow]]
+name = "Streamlit"
+author = 40628279
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false app.py"
+
