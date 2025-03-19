@@ -537,32 +537,118 @@ selected_pathogens = st.session_state.selected_pathogens
 if not selected_pathogens:
     selected_pathogens = [all_pathogens[0]]
     
-# Display the currently selected pathogens as tags
-if selected_pathogens:
-    st.sidebar.markdown("### Selected Pathogens:")
+# Initialize reordering mode in session state if it doesn't exist
+if 'reordering_mode' not in st.session_state:
+    st.session_state.reordering_mode = False
     
-    # Create a container for the tags with flex layout
-    st.sidebar.markdown("""
-    <style>
-    .tag-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-        margin-bottom: 15px;
-    }
-    .pathogen-tag {
-        background-color: #e1e1e1;
-        padding: 3px 8px;
-        border-radius: 15px;
-        font-size: 0.8rem;
-        display: inline-block;
-        margin-bottom: 5px;
-    }
-    </style>
-    <div class="tag-container">
-    """ + "".join([f'<div class="pathogen-tag">{p}</div>' for p in selected_pathogens]) + """
-    </div>
-    """, unsafe_allow_html=True)
+# Helper function to toggle reordering mode
+def toggle_reordering_mode():
+    st.session_state.reordering_mode = not st.session_state.reordering_mode
+    
+# Helper function to move pathogen up in the list
+def move_pathogen_up(index):
+    if index > 0:
+        pathogens = st.session_state.selected_pathogens.copy()
+        pathogens.insert(index-1, pathogens.pop(index))
+        st.session_state.selected_pathogens = pathogens
+
+# Helper function to move pathogen down in the list
+def move_pathogen_down(index):
+    if index < len(st.session_state.selected_pathogens) - 1:
+        pathogens = st.session_state.selected_pathogens.copy()
+        pathogens.insert(index+1, pathogens.pop(index))
+        st.session_state.selected_pathogens = pathogens
+    
+# Display the currently selected pathogens as tags or reordering interface
+if selected_pathogens:
+    # Display header and reordering button
+    col1, col2 = st.sidebar.columns([0.6, 0.4])
+    with col1:
+        st.markdown("### Selected Pathogens:")
+    with col2:
+        st.button(
+            "Reorder" if not st.session_state.reordering_mode else "Done",
+            key="toggle_reordering_button",
+            on_click=toggle_reordering_mode,
+            help="Toggle reordering mode for pathogens"
+        )
+    
+    if st.session_state.reordering_mode:
+        # Display the reordering interface
+        st.sidebar.markdown("""
+        <style>
+        .reorder-item {
+            background-color: #f0f0f0;
+            padding: 4px 8px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+        .reorder-instruction {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .pathogen-name {
+            flex-grow: 1;
+            padding: 6px 8px;
+            background-color: white;
+            border-radius: 3px;
+            text-align: center;
+            margin: 0 5px;
+        }
+        </style>
+        <div class="reorder-instruction">
+            Use the arrows to reorder the pathogens
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Display each pathogen with up/down buttons
+        for i, pathogen in enumerate(selected_pathogens):
+            cols = st.sidebar.columns([0.15, 0.7, 0.15])
+            
+            with cols[0]:
+                # Move up button (disabled for first item)
+                if i > 0:
+                    st.button("↑", key=f"up_{i}", on_click=move_pathogen_up, args=(i,))
+                else:
+                    st.write("")  # Empty placeholder
+                    
+            with cols[1]:
+                # Pathogen name
+                st.markdown(f'<div class="pathogen-name">{pathogen}</div>', unsafe_allow_html=True)
+                
+            with cols[2]:
+                # Move down button (disabled for last item)
+                if i < len(selected_pathogens) - 1:
+                    st.button("↓", key=f"down_{i}", on_click=move_pathogen_down, args=(i,))
+                else:
+                    st.write("")  # Empty placeholder
+    else:
+        # Display pathogens as tags when not in reordering mode
+        # Create a container for the tags with flex layout
+        st.sidebar.markdown("""
+        <style>
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .pathogen-tag {
+            background-color: #e1e1e1;
+            padding: 3px 8px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-bottom: 5px;
+        }
+        </style>
+        <div class="tag-container">
+        """ + "".join([f'<div class="pathogen-tag">{p}</div>' for p in selected_pathogens]) + """
+        </div>
+        """, unsafe_allow_html=True)
 
 # Chart selection
 chart_type = st.sidebar.selectbox(
@@ -1723,6 +1809,7 @@ if not filtered_df.empty:
             """
             st.components.v1.html(camera_js, height=0)
             
+            # IMPORTANT: Do not change the rendering method below. The current configuration provides optimal performance and compatibility.
             # Display the chart with proper config
             st.plotly_chart(fig, use_container_width=True, config={
                 'displayModeBar': True,
