@@ -1,6 +1,6 @@
-streamlit==1.29.0
-plotly==5.18.0
-pandas==2.0.3
-numpy==1.25.2
-firebase-admin==6.2.0
-streamlit-keyup==0.2.0 
+streamlit
+plotly
+pandas
+numpy
+firebase-admin
+streamlit-keyup 

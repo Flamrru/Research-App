@@ -1,13 +1,11 @@
-run = "pip install -r requirements.txt && python -m streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"
-language = "python3"
 entrypoint = "app.py"
-
-[nix]
-channel = "stable-22_11"
+run = "python -m streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"
 
 [env]
-PYTHONPATH = "${PYTHONPATH}:${workspaceDir}"
-PYTHONUNBUFFERED = "1"
+PYTHONUNBUFFERED = "true"
+
+[nix]
+channel = "stable-22_05"
 
 [packager]
 language = "python3"

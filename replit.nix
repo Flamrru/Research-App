@@ -1,7 +1,4 @@
 {
-  description = "Python Repl";
-
-  deps = [
-    "python3"
-  ];
+  description = "Python Streamlit";
+  deps = [];
 } 
