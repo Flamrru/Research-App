@@ -1,24 +1,22 @@
 run = "python -m streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"
 language = "python3"
-hidden = [".venv", "__pycache__", "*.pyc", ".git", "data_raw e.json"]
 entrypoint = "app.py"
+
+[nix]
+channel = "stable-22_11"
 
 [env]
 PYTHONPATH = "${PYTHONPATH}:${workspaceDir}"
 PYTHONUNBUFFERED = "1"
-
-[nix]
-channel = "stable-22_11"
 
 [packager]
 language = "python3"
 ignoredPackages = ["unit_tests"]
 
 [packager.features]
-enabledForHosting = true
+enabledForHosting = false
 packageSearch = true
 guessImports = true
-
 [languages]
 [languages.python3]
 pattern = "**/*.py"
