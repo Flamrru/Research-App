@@ -51,6 +51,7 @@ def _is_cache_valid():
 def load_research_data():
     """
     Load and process the research data from Firebase or local JSON file.
+    If neither is available, falls back to generated sample data.
     
     Returns:
         pandas.DataFrame: DataFrame with columns [Year, Pathogen, Positive, Negative, Unknown]
@@ -64,7 +65,16 @@ def load_research_data():
         ))
         return _cache['research_data']
     
+    # Check if we're in Streamlit Cloud environment
+    is_streamlit_cloud = os.environ.get("IS_STREAMLIT_CLOUD") == "true" or "STREAMLIT_SHARING_PORT" in os.environ
+    
+    # For Streamlit Cloud, prioritize Firebase and then fallback to sample data
+    # (Skip local file loading since it won't be available)
+    if is_streamlit_cloud:
+        print("Detected Streamlit Cloud environment")
+    
     # First try to load from Firebase if environment variables are set
+    firebase_success = False
     if os.environ.get("FIREBASE_PROJECT_ID"):
         try:
             # Get collection name from env var or use the new grouped collection by default
@@ -133,9 +143,10 @@ def load_research_data():
                 # Store in cache
                 _cache['research_data'] = df
                 _cache_timestamp = datetime.now()
+                firebase_success = True
                 return df
             else:
-                print("No data found in Firebase. Falling back to local data.")
+                print("No data found in Firebase.")
                 print("DEBUG: Check Firebase collection name and permissions")
         except Exception as e:
             print(f"Error loading data from Firebase: {e}")
@@ -148,95 +159,148 @@ def load_research_data():
             print("DEBUG: Environment variables check:")
             for var in firebase_vars:
                 print(f"  - {var} exists: {os.environ.get(var) is not None}")
-            print("Falling back to local data.")
     
-    # If Firebase loading failed or not configured, try loading from local file
-    try:
-        # Get the current directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Load the JSON data with a path that works in any environment
-        data_file_path = os.path.join(current_dir, 'data_raw e.json')
-        with open(data_file_path, 'r') as f:
-            raw_data = json.load(f)
-        
-        # Extract the headers
-        pathogens = []
-        for i in range(1, len(raw_data[1]), 2):
-            if raw_data[1][i] and raw_data[1][i] != "(blank)" and not pd.isna(raw_data[1][i]):
-                pathogens.append(raw_data[1][i])
-        
-        # Process the data rows (start from index 3 to skip headers)
-        data_list = []
-        
-        for row in raw_data[3:-2]:  # Skip header rows and the last two rows (blank and grand total)
-            year = row[0]
-            if not pd.isna(year) and year != "(blank)":
-                year = int(year)
-                
-                # Process each pathogen
-                for i, pathogen in enumerate(pathogens):
-                    # Calculate indices for negative and positive values
-                    col_idx = 1 + i * 2  # Starting index for each pathogen (negative)
-                    
-                    # Extract values, handling NaN values
-                    negative = 0 if pd.isna(row[col_idx]) else int(row[col_idx])
-                    positive = 0 if pd.isna(row[col_idx + 1]) else int(row[col_idx + 1])
-                    unknown = 0  # We'll use 0 for unknown since it's not in the data
-                    
-                    # Add to data list if there's any data
-                    if negative > 0 or positive > 0:
-                        data_list.append({
-                            "Year": year,
-                            "Pathogen": pathogen,
-                            "Positive": positive,
-                            "Negative": negative,
-                            "Unknown": unknown
-                        })
-        
-        print("Successfully loaded data from local file")
-        df = pd.DataFrame(data_list)
-        
-        # Store in cache
-        _cache['research_data'] = df
-        _cache_timestamp = datetime.now()
-        return df
-    
-    except Exception as e:
-        print(f"Error loading local data: {e}")
-        # Return sample data if there's an error
-        print("Using sample data as fallback")
+    # If we're in Streamlit Cloud and Firebase failed, go straight to sample data
+    if is_streamlit_cloud and not firebase_success:
+        print("In Streamlit Cloud environment, using sample data instead of local file")
         sample_df = get_sample_data()
-        
-        # Store in cache
         _cache['research_data'] = sample_df
         _cache_timestamp = datetime.now()
         return sample_df
+    
+    # If not in Streamlit Cloud or if configured to try local file, do so
+    if not is_streamlit_cloud:
+        try:
+            # Get the current directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # Load the JSON data with a path that works in any environment
+            data_file_path = os.path.join(current_dir, 'data_raw e.json')
+            
+            # Check if file exists before attempting to open
+            if os.path.isfile(data_file_path):
+                with open(data_file_path, 'r') as f:
+                    raw_data = json.load(f)
+                
+                # Extract the headers
+                pathogens = []
+                for i in range(1, len(raw_data[1]), 2):
+                    if raw_data[1][i] and raw_data[1][i] != "(blank)" and not pd.isna(raw_data[1][i]):
+                        pathogens.append(raw_data[1][i])
+                
+                # Process the data rows (start from index 3 to skip headers)
+                data_list = []
+                
+                for row in raw_data[3:-2]:  # Skip header rows and the last two rows (blank and grand total)
+                    year = row[0]
+                    if not pd.isna(year) and year != "(blank)":
+                        year = int(year)
+                        
+                        # Process each pathogen
+                        for i, pathogen in enumerate(pathogens):
+                            # Calculate indices for negative and positive values
+                            col_idx = 1 + i * 2  # Starting index for each pathogen (negative)
+                            
+                            # Extract values, handling NaN values
+                            negative = 0 if pd.isna(row[col_idx]) else int(row[col_idx])
+                            positive = 0 if pd.isna(row[col_idx + 1]) else int(row[col_idx + 1])
+                            unknown = 0  # We'll use 0 for unknown since it's not in the data
+                            
+                            # Add to data list if there's any data
+                            if negative > 0 or positive > 0:
+                                data_list.append({
+                                    "Year": year,
+                                    "Pathogen": pathogen,
+                                    "Positive": positive,
+                                    "Negative": negative,
+                                    "Unknown": unknown
+                                })
+                
+                print("Successfully loaded data from local file")
+                df = pd.DataFrame(data_list)
+                
+                # Store in cache
+                _cache['research_data'] = df
+                _cache_timestamp = datetime.now()
+                return df
+            else:
+                print(f"Local data file not found at: {data_file_path}")
+                # Fall through to sample data
+        except Exception as e:
+            print(f"Error loading local data: {e}")
+            # Fall through to sample data
+    
+    # If all else fails, use sample data
+    print("Using sample data as final fallback")
+    sample_df = get_sample_data()
+    
+    # Store in cache
+    _cache['research_data'] = sample_df
+    _cache_timestamp = datetime.now()
+    return sample_df
 
 def get_sample_data():
     """
-    Provides sample data in case the JSON data cannot be loaded.
+    Provides comprehensive sample data in case the JSON data cannot be loaded.
+    This data mirrors the structure of the real data but with simplified numbers.
     """
-    data = [
-        # Excerpt of data
-        {"Year": 2019, "Pathogen": "SARS-CoV2", "Positive": 0, "Negative": 0, "Unknown": 0},
-        {"Year": 2020, "Pathogen": "SARS-CoV2", "Positive": 10, "Negative": 84, "Unknown": 0},
-        {"Year": 2021, "Pathogen": "SARS-CoV2", "Positive": 18, "Negative": 83, "Unknown": 0},
-        
-        {"Year": 2018, "Pathogen": "Tularensis", "Positive": 3, "Negative": 22, "Unknown": 0},
-        {"Year": 2019, "Pathogen": "Tularensis", "Positive": 4, "Negative": 29, "Unknown": 0},
-        {"Year": 2020, "Pathogen": "Tularensis", "Positive": 6, "Negative": 22, "Unknown": 0},
-        {"Year": 2021, "Pathogen": "Tularensis", "Positive": 24, "Negative": 27, "Unknown": 0},
-        
-        {"Year": 2018, "Pathogen": "Mycobacteria", "Positive": 15, "Negative": 99, "Unknown": 0},
-        {"Year": 2019, "Pathogen": "Mycobacteria", "Positive": 14, "Negative": 112, "Unknown": 0},
-        {"Year": 2020, "Pathogen": "Mycobacteria", "Positive": 25, "Negative": 104, "Unknown": 0},
-        {"Year": 2021, "Pathogen": "Mycobacteria", "Positive": 21, "Negative": 155, "Unknown": 0},
-        
-        {"Year": 2018, "Pathogen": "Helicobacter", "Positive": 30, "Negative": 122, "Unknown": 0},
-        {"Year": 2019, "Pathogen": "Helicobacter", "Positive": 30, "Negative": 121, "Unknown": 0},
-        {"Year": 2020, "Pathogen": "Helicobacter", "Positive": 34, "Negative": 145, "Unknown": 0},
-        {"Year": 2021, "Pathogen": "Helicobacter", "Positive": 44, "Negative": 118, "Unknown": 0},
+    # Years from 2018-2023
+    years = range(2018, 2024)
+    
+    # Common pathogens in research data
+    pathogens = [
+        "SARS-CoV2", "Tularensis", "Mycobacteria", "Helicobacter", 
+        "Brucella", "Coxiella", "Bartonella", "Leptospira",
+        "Yersinia", "Francisella", "Campylobacter", "Salmonella",
+        "Listeria", "E. coli", "Staphylococcus", "Streptococcus",
+        "Vibrio", "Borrelia", "Rickettsia", "Legionella"
     ]
+    
+    # Generate sample data for all years and pathogens
+    data = []
+    for year in years:
+        for pathogen in pathogens:
+            # Generate some realistic looking data with trends
+            # More recent years have more samples
+            year_factor = (year - 2017) * 0.3
+            
+            # Base values that increase with year
+            base_positive = int(5 + year_factor * 5)
+            base_negative = int(20 + year_factor * 10)
+            
+            # Different pathogens have different positivity rates
+            if pathogen in ["SARS-CoV2", "Mycobacteria", "Helicobacter"]:
+                # High positivity
+                positive = int(base_positive * 1.5)
+                negative = int(base_negative * 0.8)
+            elif pathogen in ["Brucella", "Coxiella", "Bartonella"]:
+                # Medium positivity
+                positive = int(base_positive * 1.0)
+                negative = int(base_negative * 1.0)
+            else:
+                # Low positivity
+                positive = int(base_positive * 0.5)
+                negative = int(base_negative * 1.2)
+            
+            # SARS-CoV2 only appears from 2020 onwards
+            if pathogen == "SARS-CoV2" and year < 2020:
+                positive = 0
+                negative = 0
+            
+            # Add some randomness
+            positive = max(0, int(positive * (0.8 + np.random.random() * 0.4)))
+            negative = max(0, int(negative * (0.8 + np.random.random() * 0.4)))
+            
+            # Add to dataset if there's any data
+            if positive > 0 or negative > 0:
+                data.append({
+                    "Year": year,
+                    "Pathogen": pathogen,
+                    "Positive": positive,
+                    "Negative": negative,
+                    "Unknown": 0
+                })
+    
+    print(f"Generated sample data with {len(data)} records")
     return pd.DataFrame(data)
 
 # Helper function to get a complete dataframe with all year/pathogen combinations
