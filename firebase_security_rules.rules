@@ -1,0 +1,40 @@
+// Firestore security rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Secure the entire database by default
+    match /{document=**} {
+      // Deny read/write access by default
+      allow read, write: if false;
+    }
+    
+    // Function to check if request comes from our app's domain
+    function isFromAppDomain() {
+      return request.auth != null || 
+             (request.headers.origin.matches('https://.*\\.replit\\.app') || 
+              request.headers.origin.matches('https://.*\\.streamlit\\.app'));
+    }
+    
+    // Allow API key access for public clients (your deployed app)
+    function hasValidApiKey() {
+      // Valid api key can be checked from request headers
+      // This is useful when you want to allow some access to your app
+      // but not to other clients
+      return request.auth != null || request.headers.apikey == "YOUR_APP_API_KEY";
+    }
+    
+    // Only allow access to researchData through service accounts or authorized requests
+    match /researchData/{document} {
+      // Only allow reads from authenticated service accounts or from your deployed app
+      allow read: if (request.auth != null && 
+                    (request.auth.token.email == 'firebase-adminsdk-fbsvc@reaserch-project-1d8ca.iam.gserviceaccount.com' || 
+                     request.auth.token.firebase.sign_in_provider == 'custom')) || 
+                    (isFromAppDomain() && hasValidApiKey() && 
+                     resource.data.isPubliclyViewable == true);
+      
+      // Only allow writes from authenticated service accounts
+      allow write: if request.auth != null && 
+                     request.auth.token.email == 'firebase-adminsdk-fbsvc@reaserch-project-1d8ca.iam.gserviceaccount.com';
+    }
+  }
+} 

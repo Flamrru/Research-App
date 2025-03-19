@@ -3,4 +3,6 @@ plotly
 pandas
 numpy
 firebase-admin
-st-keyup 
+st-keyup
+python-dotenv
+requests 

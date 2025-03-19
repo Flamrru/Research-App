@@ -1,7 +1,17 @@
 # Sensitive data files
 data_raw e.json
-*.json
+firebase-credentials.json
 .env
+
+# Firebase
+.firebaserc
+firebase.json
+firestore.indexes.json
+firebase-debug.log
+*-debug.log
+*-error.log
+.firebase/
+*firebase-adminsdk*.json
 
 # Python
 __pycache__/

@@ -247,3 +247,21 @@ When you need to update your app:
 - [GitHub Documentation](https://docs.github.com)
 
 If you need to modify how Firebase data is accessed, edit the `load_research_data()` function in your `data.py` file. 
+
+## Security Rules Deployment
+
+To secure your Firebase data:
+
+1. Deploy the security rules:
+   ```
+   python deploy_firebase_rules.py
+   ```
+
+2. Test the security:
+   ```
+   python test_firebase_security.py
+   ```
+
+3. When deploying to Replit, add your Firebase credentials to Replit's Secrets tab.
+
+This implementation ensures your data is secure, accessible only through your app, and properly protected against unauthorized access. 

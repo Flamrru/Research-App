@@ -5,6 +5,10 @@ import json
 import os
 import pandas as pd
 import argparse
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def load_json_data(file_path):
     """Load data from the JSON file."""
@@ -51,7 +55,9 @@ def process_research_data(raw_data):
                             "Positive": positive,
                             "Negative": negative,
                             "Unknown": unknown,
-                            "isPubliclyViewable": True
+                            "isPubliclyViewable": True,
+                            # Add timestamp for when the data was added
+                            "uploadedAt": firestore.SERVER_TIMESTAMP
                         })
             except Exception as e:
                 print(f"Error processing row with year {year}: {e}")
@@ -125,6 +131,10 @@ def upload_to_firebase(json_data, collection_name):
             print("Upload cancelled.")
             return []
     
+    # Create batch ID for this upload to track uploads
+    from datetime import datetime
+    batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
+    
     # Upload each document in batches (Firestore has a limit of 500 operations per batch)
     batch_size = 450  # Slightly under the 500 limit to be safe
     total_uploaded = 0
@@ -135,8 +145,11 @@ def upload_to_firebase(json_data, collection_name):
         batch_data = processed_data[i:i + batch_size]
         
         for j, item in enumerate(batch_data):
+            # Add batch ID to the data
+            item["batchId"] = batch_id
+            
             # Create a unique document ID
-            doc_ref = db.collection(collection_name).document(f"data_{i+j}")
+            doc_ref = db.collection(collection_name).document(f"{batch_id}_data_{i+j}")
             batch.set(doc_ref, item)
         
         # Commit the batch
