@@ -29,15 +29,9 @@ def test_firebase_connection():
                 "FIREBASE_CLIENT_X509_CERT_URL"
             ]
             
-            # Check if we're in Replit
-            if os.environ.get("REPL_ID") and not os.environ.get("FIREBASE_PROJECT_ID"):
-                print("Running in Replit, checking for secrets...")
-                # Secrets in Replit are automatically loaded as environment variables
-            
             missing_vars = [var for var in required_vars if not os.environ.get(var)]
             if missing_vars:
                 print(f"Missing environment variables: {', '.join(missing_vars)}")
-                print("Please add these as Secrets in the Replit Secrets tab")
                 return False
             
             # Initialize Firebase with credentials from environment variables
@@ -83,27 +77,6 @@ def load_data_from_firebase():
         try:
             firebase_admin.get_app()
         except ValueError:
-            # Check if all required environment variables are set
-            required_vars = [
-                "FIREBASE_PROJECT_ID",
-                "FIREBASE_PRIVATE_KEY_ID",
-                "FIREBASE_PRIVATE_KEY",
-                "FIREBASE_CLIENT_EMAIL",
-                "FIREBASE_CLIENT_ID",
-                "FIREBASE_CLIENT_X509_CERT_URL"
-            ]
-            
-            # Check if we're in Replit
-            if os.environ.get("REPL_ID") and not os.environ.get("FIREBASE_PROJECT_ID"):
-                print("Running in Replit, checking for secrets...")
-                # In Replit, secrets are automatically loaded as environment variables
-            
-            missing_vars = [var for var in required_vars if not os.environ.get(var)]
-            if missing_vars:
-                print(f"Missing environment variables: {', '.join(missing_vars)}")
-                print("Please add these as Secrets in the Replit Secrets tab")
-                return pd.DataFrame()  # Return empty DataFrame if missing variables
-            
             # Initialize with environment variables
             cred = credentials.Certificate({
                 "type": "service_account",

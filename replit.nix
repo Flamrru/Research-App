@@ -1,4 +1,0 @@
-{
-  description = "Python Streamlit";
-  deps = [];
-} 
