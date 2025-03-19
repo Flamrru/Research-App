@@ -1,8 +1,7 @@
 {
-  description = "Streamlit Research Data Visualization App";
+  description = "Python Repl";
 
   deps = [
     "python3"
-    "python3Packages.pip"
   ];
 } 

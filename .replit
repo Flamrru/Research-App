@@ -1,4 +1,4 @@
-run = "python -m streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"
+run = "pip install -r requirements.txt && python -m streamlit run app.py --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableWebsocketCompression=false"
 language = "python3"
 entrypoint = "app.py"
 
