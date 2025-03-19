@@ -6,8 +6,61 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-# Initialize Firebase when imported - this can be skipped as we'll initialize in load_research_data
+# Initialize Firebase when imported - this only runs once
+def initialize_firebase():
+    try:
+        # Check if already initialized
+        firebase_admin.get_app()
+        print("Firebase already initialized")
+        return True
+    except ValueError:
+        # Initialize with environment variables if they exist
+        try:
+            # Check if all required environment variables are set
+            required_vars = [
+                "FIREBASE_PROJECT_ID",
+                "FIREBASE_PRIVATE_KEY_ID",
+                "FIREBASE_PRIVATE_KEY",
+                "FIREBASE_CLIENT_EMAIL",
+                "FIREBASE_CLIENT_ID",
+                "FIREBASE_CLIENT_X509_CERT_URL"
+            ]
+            
+            # In Replit, check for secrets
+            if os.environ.get("REPL_ID") and not os.environ.get("FIREBASE_PROJECT_ID"):
+                print("Running in Replit, checking for secrets...")
+                # Secrets in Replit are automatically loaded as environment variables
+                missing_vars = [var for var in required_vars if not os.environ.get(var)]
+                if missing_vars:
+                    print(f"Missing Firebase credentials: {', '.join(missing_vars)}")
+                    print("Please add these as Secrets in the Replit Secrets tab")
+                    return False
+            
+            if os.environ.get("FIREBASE_PROJECT_ID"):
+                print("Initializing Firebase from environment variables...")
+                cred = credentials.Certificate({
+                    "type": "service_account",
+                    "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+                    "private_key_id": os.environ.get("FIREBASE_PRIVATE_KEY_ID"),
+                    "private_key": os.environ.get("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
+                    "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL"),
+                    "client_id": os.environ.get("FIREBASE_CLIENT_ID"),
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_x509_cert_url": os.environ.get("FIREBASE_CLIENT_X509_CERT_URL")
+                })
+                firebase_admin.initialize_app(cred)
+                print("Firebase initialized successfully")
+                return True
+            else:
+                print("Firebase credentials not found in environment variables")
+                return False
+        except Exception as e:
+            print(f"Firebase initialization error (will use local data): {e}")
+            return False
 
+# This is where you can replace with your actual research data
 def load_research_data():
     """
     Load and process the research data from Firebase or local JSON file.
@@ -15,80 +68,30 @@ def load_research_data():
     Returns:
         pandas.DataFrame: DataFrame with columns [Year, Pathogen, Positive, Negative, Unknown]
     """
-    # First try loading from Firebase using the credentials.json file
-    try:
-        # Initialize Firebase if not already initialized
-        try:
-            firebase_admin.get_app()
-        except ValueError:
-            try:
-                # First try with the JSON credentials file
-                if os.path.exists('firebase-credentials.json'):
-                    cred = credentials.Certificate('firebase-credentials.json')
-                    firebase_admin.initialize_app(cred)
-                    print("Firebase initialized successfully with JSON credentials file")
-                else:
-                    # Fall back to environment variables
-                    from dotenv import load_dotenv
-                    load_dotenv()
-                    
-                    if os.environ.get("FIREBASE_PROJECT_ID"):
-                        cred = credentials.Certificate({
-                            "type": "service_account",
-                            "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
-                            "private_key_id": os.environ.get("FIREBASE_PRIVATE_KEY_ID"),
-                            "private_key": os.environ.get("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
-                            "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL"),
-                            "client_id": os.environ.get("FIREBASE_CLIENT_ID"),
-                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                            "token_uri": "https://oauth2.googleapis.com/token",
-                            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                            "client_x509_cert_url": os.environ.get("FIREBASE_CLIENT_X509_CERT_URL")
-                        })
-                        firebase_admin.initialize_app(cred)
-                        print("Firebase initialized successfully with environment variables")
-                    else:
-                        raise ValueError("No Firebase credentials found")
-            except Exception as e:
-                print(f"Firebase initialization error: {e}")
-                print("Will fall back to local data")
-                return load_local_data()
-        
-        # Try to load data from Firebase
-        print("Loading data from Firebase...")
-        db = firestore.client()
-        docs = db.collection('researchData').where('isPubliclyViewable', '==', True).get()
-        
-        # Convert to list of dictionaries
-        data_list = [doc.to_dict() for doc in docs]
-        
-        # If data is retrieved, return it as a DataFrame
-        if data_list:
-            print(f"Successfully loaded {len(data_list)} records from Firebase")
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(data_list)
-            
-            # Drop Firebase-specific fields that aren't needed for analysis
-            if 'uploadedAt' in df.columns:
-                df = df.drop(columns=['uploadedAt'])
-            if 'batchId' in df.columns:
-                df = df.drop(columns=['batchId'])
-            if 'isPubliclyViewable' in df.columns:
-                df = df.drop(columns=['isPubliclyViewable'])
-                
-            return df
-        else:
-            print("No data found in Firebase. Falling back to local data.")
-            return load_local_data()
+    # First try to load from Firebase if environment variables are set
+    firebase_initialized = initialize_firebase()
     
-    except Exception as e:
-        print(f"Error loading data from Firebase: {e}")
-        print("Falling back to local data.")
-        return load_local_data()
-
-def load_local_data():
-    """Load data from local JSON file"""
+    if firebase_initialized:
+        try:
+            print("Attempting to load data from Firebase...")
+            # Access Firestore and get data
+            db = firestore.client()
+            docs = db.collection('researchData').where('isPubliclyViewable', '==', True).get()
+            
+            # Convert to list of dictionaries
+            data_list = [doc.to_dict() for doc in docs]
+            
+            # If data is retrieved, return it as a DataFrame
+            if data_list:
+                print(f"Successfully loaded {len(data_list)} records from Firebase")
+                return pd.DataFrame(data_list)
+            else:
+                print("No data found in Firebase. Falling back to local data.")
+        except Exception as e:
+            print(f"Error loading data from Firebase: {e}")
+            print("Falling back to local data.")
+    
+    # If Firebase loading failed or not configured, try loading from local file
     try:
         # Load the JSON data
         with open('data_raw e.json', 'r') as f:
