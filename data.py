@@ -122,7 +122,7 @@ def load_research_data():
             else:
                 # Fall back to the old structure if no summary document
                 print("Using original Firebase structure...")
-                docs = db.collection(collection_name).where('isPubliclyViewable', '==', True).get()
+                docs = db.collection(collection_name).filter("isPubliclyViewable", "==", True).get()
                 data_list = [doc.to_dict() for doc in docs]
             
             # If data is retrieved, return it as a DataFrame
@@ -136,14 +136,27 @@ def load_research_data():
                 return df
             else:
                 print("No data found in Firebase. Falling back to local data.")
+                print("DEBUG: Check Firebase collection name and permissions")
         except Exception as e:
             print(f"Error loading data from Firebase: {e}")
+            print(f"DEBUG: Firebase error details - Type: {type(e).__name__}")
+            # Print environment variable existence (not values for security)
+            firebase_vars = [
+                "FIREBASE_PROJECT_ID", "FIREBASE_PRIVATE_KEY_ID", "FIREBASE_CLIENT_EMAIL", 
+                "FIREBASE_CLIENT_ID", "FIREBASE_CLIENT_X509_CERT_URL", "FIREBASE_COLLECTION"
+            ]
+            print("DEBUG: Environment variables check:")
+            for var in firebase_vars:
+                print(f"  - {var} exists: {os.environ.get(var) is not None}")
             print("Falling back to local data.")
     
     # If Firebase loading failed or not configured, try loading from local file
     try:
-        # Load the JSON data
-        with open('data_raw e.json', 'r') as f:
+        # Get the current directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Load the JSON data with a path that works in any environment
+        data_file_path = os.path.join(current_dir, 'data_raw e.json')
+        with open(data_file_path, 'r') as f:
             raw_data = json.load(f)
         
         # Extract the headers

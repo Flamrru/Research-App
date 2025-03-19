@@ -1,6 +1,6 @@
 # Sensitive data files
-data_raw e.json
-*.json
+# data_raw e.json  # Uncommented for Streamlit deployment
+# *.json  # Uncommented for Streamlit deployment
 .env
 
 # Python
