@@ -1,3 +1,8 @@
+"""
+This module handles loading and processing research data from Firebase.
+The code has been updated to ensure it always pulls data from Firebase
+and never falls back to sample data.
+"""
 import pandas as pd
 import json
 import numpy as np
