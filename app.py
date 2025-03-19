@@ -391,7 +391,13 @@ def toggle_pathogen_selector():
     st.session_state.show_pathogen_selector = not st.session_state.show_pathogen_selector
     
 def select_all_pathogens():
-    st.session_state.selected_pathogens = all_pathogens.copy()
+    # If there's a filter, select only the filtered pathogens up to 18
+    if st.session_state.pathogen_filter:
+        filtered_pathogens = [p for p in all_pathogens if st.session_state.pathogen_filter.lower() in p.lower()]
+        st.session_state.selected_pathogens = filtered_pathogens[:18].copy()
+    else:
+        # Otherwise select the first 18 pathogens from the full list
+        st.session_state.selected_pathogens = all_pathogens[:18].copy()
     
 def clear_all_pathogens():
     st.session_state.selected_pathogens = []
@@ -408,12 +414,17 @@ pathogen_selector_container = st.sidebar.container()
 
 with pathogen_selector_container:
     # Add the button to toggle the selector
-    st.button(
-        selector_label,
-        key="toggle_pathogen_selector",
-        on_click=toggle_pathogen_selector,
-        help="Click to open the pathogen selector"
-    )
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.button(
+            selector_label,
+            key="toggle_pathogen_selector",
+            on_click=toggle_pathogen_selector,
+            help="Click to open the pathogen selector"
+        )
+    with col2:
+        if selected_count >= 18:
+            st.caption("Max: 18")
     
     # If the selector should be shown, create a modal-like interface within the same container
     if st.session_state.show_pathogen_selector:
@@ -465,6 +476,10 @@ with pathogen_selector_container:
         if st.session_state.pathogen_filter:
             st.caption(f"Found {len(filtered_pathogens)} matching pathogens")
         
+        # Display warning if max pathogens are selected
+        if len(st.session_state.selected_pathogens) >= 18:
+            st.warning("Maximum selection limit (18 pathogens) reached", icon="⚠️")
+        
         # Pathogen selection list with checkboxes
         st.markdown('<div class="pathogen-selector-list">', unsafe_allow_html=True)
         
@@ -482,7 +497,9 @@ with pathogen_selector_container:
                     key=f"pathogen_{pathogen}"
                 ):
                     if pathogen not in st.session_state.selected_pathogens:
-                        st.session_state.selected_pathogens.append(pathogen)
+                        # Check if we've reached the limit of 18 pathogens
+                        if len(st.session_state.selected_pathogens) < 18:
+                            st.session_state.selected_pathogens.append(pathogen)
                 else:
                     if pathogen in st.session_state.selected_pathogens:
                         st.session_state.selected_pathogens.remove(pathogen)
@@ -497,7 +514,9 @@ with pathogen_selector_container:
                     key=f"pathogen_{pathogen}_col2"
                 ):
                     if pathogen not in st.session_state.selected_pathogens:
-                        st.session_state.selected_pathogens.append(pathogen)
+                        # Check if we've reached the limit of 18 pathogens
+                        if len(st.session_state.selected_pathogens) < 18:
+                            st.session_state.selected_pathogens.append(pathogen)
                 else:
                     if pathogen in st.session_state.selected_pathogens:
                         st.session_state.selected_pathogens.remove(pathogen)
