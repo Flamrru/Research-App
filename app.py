@@ -1944,21 +1944,11 @@ def create_2d_bar_chart(df, opacity, colors, grid_visible, show_values, bar_mode
 
 # Create a faceted bar chart with properly handled titles
 def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max_cols=4, uniform_y_scale=False, show_all_year_labels=True, bar_width=0.5, subplot_height=400):
-    # Get all pathogens from the dataframe
-    df_pathogens = sorted(df["Pathogen"].unique())
+    # Default grid color for both light and dark themes
+    grid_color = 'rgba(211, 211, 211, 0.5)'
     
-    # Use the session state order for pathogens that are in the session state
-    # but ensure we include all pathogens from the dataframe
-    if hasattr(st, 'session_state') and 'selected_pathogens' in st.session_state:
-        # Start with pathogens in the session state that are also in the dataframe
-        pathogens = [p for p in st.session_state.selected_pathogens if p in df_pathogens]
-        
-        # Add any pathogens from the dataframe that weren't in the session state
-        for p in df_pathogens:
-            if p not in pathogens:
-                pathogens.append(p)
-    else:
-        pathogens = df_pathogens
+    # Get all pathogens from the dataframe
+    pathogens = sorted(df["Pathogen"].unique())
     
     num_pathogens = len(pathogens)
     
@@ -1978,44 +1968,19 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
     # Calculate grid dimensions based on number of pathogens
     # Use max_cols to limit the number of columns
     n_cols = min(max_cols, max(1, num_pathogens))  # Ensure at least 1 column
-
-    # Calculate the number of rows needed based on actual pathogen count
-    # At minimum, use 1 row to avoid empty grid
     n_rows = max(1, math.ceil(num_pathogens / n_cols))
 
-    # Adjust spacing based on number of pathogens - use more spacing when fewer charts
-    def get_adjusted_spacing(pathogen_count, cols):
-        # Calculate max allowed vertical spacing (1/(rows-1))
-        n_rows = max(1, math.ceil(pathogen_count / cols))
-        max_allowed_v_spacing = 0.95/(n_rows - 1) if n_rows > 1 else 0.4
-        
-        # For a single chart, use more spacing but within limits
-        if pathogen_count == 1:
-            return min(0.4, max_allowed_v_spacing), 0.2
-        
-        # For 2-3 charts, use moderate spacing
-        if pathogen_count <= 3:
-            return min(0.35, max_allowed_v_spacing), 0.15
-        
-        # For 4-6 charts, use standard spacing
-        if pathogen_count <= 6:
-            return min(0.25, max_allowed_v_spacing), 0.12
-        
-        # For more charts, use tighter spacing
-        return min(0.15, max_allowed_v_spacing), 0.1
+    # Simplified spacing constants
+    v_spacing = 0.2
+    h_spacing = 0.1
 
-    # Get appropriate spacing based on number of pathogens
-    v_spacing, h_spacing = get_adjusted_spacing(num_pathogens, n_cols)
-
-    # Fixed sizes - these will remain constant regardless of number of pathogens
-    # Use higher values for subplot height to make charts taller
-    fixed_subplot_height = 300  # Base height per subplot
-    row_height = 350  # Target row height (taller than base)
-    fixed_subplot_width = 300   # pixels per subplot
-
-    # Calculate total figure dimensions - use row_height for actual display
-    subplot_total_height = row_height * n_rows
-    subplot_total_width = fixed_subplot_width * n_cols
+    # Fixed dimensions
+    subplot_height = 300
+    subplot_width = 300
+    
+    # Calculate total figure dimensions
+    total_height = subplot_height * n_rows + 100  # Add space for margins
+    total_width = subplot_width * n_cols + 100    # Add space for margins
     
     # Create subplot grid with titles 
     fig = make_subplots(
@@ -2051,12 +2016,12 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
             # Add negative bars (bottom layer)
             fig.add_trace(
                 go.Bar(
-                    x=pathogen_data["Year"],
+                    x=pathogen_data["Year"].astype(str),  # Convert to string to avoid dtick issues
                     y=pathogen_data["Negative"],
                     name="Negative",
                     marker_color=colors["negative"],
                     opacity=opacity,
-                    showlegend=False,  # Never show legend items
+                    showlegend=i==0,  # Only show legend for first pathogen
                     text=pathogen_data["Negative"] if show_values else None,
                     textposition="inside",
                     width=bar_width,
@@ -2068,12 +2033,12 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
             # Add positive bars (stacked on top)
             fig.add_trace(
                 go.Bar(
-                    x=pathogen_data["Year"],
+                    x=pathogen_data["Year"].astype(str),  # Convert to string to avoid dtick issues
                     y=pathogen_data["Positive"],
                     name="Positive",
                     marker_color=colors["positive"],
                     opacity=opacity,
-                    showlegend=False,  # Never show legend items
+                    showlegend=i==0,  # Only show legend for first pathogen
                     text=pathogen_data["Positive"] if show_values else None,
                     textposition="inside",
                     width=bar_width,
@@ -2084,25 +2049,10 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
             
             # Calculate individual y-max for this pathogen
             individual_y_max = pathogen_data[['Positive', 'Negative']].sum(axis=1).max() * 1.15
-            if individual_y_max == 0:
-                individual_y_max = 10  # Default max if no data
+            individual_y_max = max(10, individual_y_max)  # Default min value if data is small
             
             # Use global y_max if uniform scaling is requested
             max_value = y_max if uniform_y_scale and y_max is not None else individual_y_max
-            
-            # Determine appropriate y-axis tick spacing based on the data range
-            if max_value <= 10:
-                tick_interval = 2
-            elif max_value <= 20:
-                tick_interval = 5
-            elif max_value <= 50:
-                tick_interval = 10
-            elif max_value <= 100:
-                tick_interval = 20
-            elif max_value <= 200:
-                tick_interval = 50
-            else:
-                tick_interval = math.ceil(max_value / 5 / 10) * 10
             
             # Update axes for this subplot
             fig.update_xaxes(
@@ -2111,10 +2061,7 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
                 gridcolor=grid_color if grid_visible else "white",
                 tickangle=90,  # Use vertical tick labels for years to save space
                 tickfont=dict(size=10),
-                dtick=2,  # Display every 2 years to reduce crowding
-                row=row, col=col,
-                matches=None,  # Disable matching to allow independent sizing
-                ticklabelstandoff=15  # Add more padding for the tick labels
+                row=row, col=col
             )
             
             fig.update_yaxes(
@@ -2122,10 +2069,8 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
                 showgrid=grid_visible,
                 gridcolor=grid_color if grid_visible else "white",
                 range=[0, max_value],
-                dtick=tick_interval,
                 tickfont=dict(size=10),
                 row=row, col=col,
-                matches=None,  # Disable matching to allow independent sizing
                 tickformat=",d"  # Format ticks as integers with commas for thousands
             )
         else:
@@ -2150,43 +2095,32 @@ def create_faceted_bar_chart(df, opacity, colors, grid_visible, show_values, max
                 row=row, col=col
             )
     
-    # Calculate appropriate height based on fixed subplot height plus margins
-    margin_top = 50  # Reduced top margin since titles are closer to charts
-    margin_bottom = 50  # Balanced bottom margin
-    total_height = subplot_total_height + margin_top + margin_bottom
-    
-    # Calculate appropriate width with margins
-    margin_left = 50
-    margin_right = 30
-    total_width = subplot_total_width + margin_left + margin_right
-    
     # Update layout with fixed dimensions
     fig.update_layout(
         barmode='stack',
         height=total_height,
         width=total_width,
-        margin=dict(t=margin_top, b=margin_bottom, l=margin_left, r=margin_right),
         bargap=0.15,
         bargroupgap=0.05,
-        showlegend=False,  # Completely hide the legend
-        title=None,  # Remove the main title as it overlaps with subplot titles
-        uniformtext=dict(mode='hide', minsize=8)  # Hide labels if they don't fit
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5
+        ),
+        title=None
     )
     
-    # Update subplot titles positioning with more space
+    # Update subplot titles
     fig.update_annotations(
         font=dict(
-            family="Arial, sans-serif",
-            size=13,
-            color=colors["text"],
-            weight="bold"
-        ),
-        yshift=25,  # Keep titles closer to their charts, not pushed up too high
-        xanchor="center",
-        yanchor="bottom"
+            size=12,
+            color="#333333"
+        )
     )
     
-    # Return both the figure and calculated dimensions
     return fig, total_height, total_width
 
 # Display chart with metrics
@@ -2415,62 +2349,51 @@ if not filtered_df.empty:
             
         elif chart_type == "Faceted Bar Chart":
             # Create the faceted bar chart with correct sizing
-            fig, total_height, total_width = create_faceted_bar_chart(filtered_df, opacity, colors, grid_visible, show_values, max_cols, uniform_y_scale, show_all_year_labels, facet_bar_width, subplot_height)
-            
-            # Apply theme colors
-            fig.update_layout(
-                font=dict(color=text_color),
-                paper_bgcolor=plot_bg_color,
-                plot_bgcolor=plot_bg_color
-            )
-            
-            # Add a title as Streamlit markdown above the chart instead of in the Plotly figure
-            st.markdown(f"""
-            <h3 style='text-align: center; margin-bottom: 5px; color: {text_color};'>
-                Faceted Bar Chart
-            </h3>
-            <div style='text-align: center; margin-bottom: 15px; font-size: 0.9rem;'>
-                <span style='display: inline-block; width: 12px; height: 12px; background-color: {colors["positive"]}; margin-right: 5px;'></span>
-                <span style='margin-right: 15px;'>Positive</span>
-                <span style='display: inline-block; width: 12px; height: 12px; background-color: {colors["negative"]}; margin-right: 5px;'></span>
-                <span>Negative</span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Use direct HTML rendering for precise control over dimensions
-            config = {
-                'displayModeBar': True,  # Show the mode bar to allow downloading
-                'displaylogo': False,
-                'scrollZoom': False,
-                'toImageButtonOptions': {
-                    'format': 'png',
-                    'filename': f'faceted_bar_chart_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
-                    'height': total_height+100,
-                    'width': total_width+100,
-                    'scale': 2
+            try:
+                # Make sure year is integer type before creating chart
+                filtered_df["Year"] = filtered_df["Year"].astype(int)
+                
+                fig, total_height, total_width = create_faceted_bar_chart(filtered_df, opacity, colors, grid_visible, show_values, max_cols, uniform_y_scale, show_all_year_labels, facet_bar_width, subplot_height)
+                
+                # Apply theme colors
+                fig.update_layout(
+                    font=dict(color=text_color),
+                    paper_bgcolor=plot_bg_color,
+                    plot_bgcolor=plot_bg_color
+                )
+                
+                # Add a title as Streamlit markdown above the chart instead of in the Plotly figure
+                st.markdown(f"""
+                <h3 style='text-align: center; margin-bottom: 5px; color: {text_color};'>
+                    Faceted Bar Chart
+                </h3>
+                <div style='text-align: center; margin-bottom: 15px; font-size: 0.9rem;'>
+                    <span style='display: inline-block; width: 12px; height: 12px; background-color: {colors["positive"]}; margin-right: 5px;'></span>
+                    <span style='margin-right: 15px;'>Positive</span>
+                    <span style='display: inline-block; width: 12px; height: 12px; background-color: {colors["negative"]}; margin-right: 5px;'></span>
+                    <span>Negative</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Use direct HTML rendering for precise control over dimensions
+                config = {
+                    'displayModeBar': True,  # Show the mode bar to allow downloading
+                    'displaylogo': False,
+                    'scrollZoom': False,
+                    'toImageButtonOptions': {
+                        'format': 'png',
+                        'filename': f'faceted_bar_chart_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
+                        'height': total_height+100,
+                        'width': total_width+100,
+                        'scale': 2
+                    }
                 }
-            }
-            
-            # Create HTML and render with exact dimensions
-            html_chart = fig.to_html(full_html=False, include_plotlyjs='cdn', config=config)
-            
-            # Add buffer that adjusts based on the number of pathogens
-            # More buffer for fewer pathogens, but not too much
-            selected_pathogens_count = len(filtered_df["Pathogen"].unique())
-            buffer_height = 150 if selected_pathogens_count <= 3 else 100
-            buffer_width = 80 if selected_pathogens_count <= 3 else 60
-            
-            # Minimum width and height to prevent charts from being too small
-            min_width = 800
-            min_height = 700  # Increase minimum height for better display
-            
-            # Ensure charts have reasonable dimensions
-            display_width = max(min_width, total_width + buffer_width)
-            display_height = max(min_height, total_height + buffer_height)
-            
-            # Display the chart with exact dimensions, ensuring each subplot maintains consistent size
-            st.components.v1.html(html_chart, height=display_height, width=display_width)
-            
+                
+                st.plotly_chart(fig, use_container_width=False, config=config)
+            except Exception as e:
+                st.error(f"Error creating faceted bar chart: {str(e)}")
+                st.info("Try using fewer pathogens or different filter options.")
+        
         # Close chart container
         st.markdown("</div>", unsafe_allow_html=True)
         
