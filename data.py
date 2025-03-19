@@ -5,6 +5,8 @@ import os
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
+import time
+from datetime import datetime, timedelta
 
 # Initialize Firebase when imported - this only runs once
 try:
@@ -32,6 +34,19 @@ except ValueError:
     except Exception as e:
         print(f"Firebase initialization error (will use local data): {e}")
 
+# Add cache functionality
+_cache = {}
+_cache_timestamp = None
+_cache_lifetime = 3600  # Cache lifetime in seconds (1 hour)
+
+def _is_cache_valid():
+    """Check if cache is valid (not expired)"""
+    global _cache_timestamp
+    if not _cache_timestamp:
+        return False
+    current_time = datetime.now()
+    return (current_time - _cache_timestamp).total_seconds() < _cache_lifetime
+
 # This is where you can replace with your actual research data
 def load_research_data():
     """
@@ -40,21 +55,85 @@ def load_research_data():
     Returns:
         pandas.DataFrame: DataFrame with columns [Year, Pathogen, Positive, Negative, Unknown]
     """
+    global _cache, _cache_timestamp
+    
+    # Check if we have valid cached data
+    if _is_cache_valid() and 'research_data' in _cache:
+        print("Using cached data (expires in {:.1f} minutes)".format(
+            (_cache_lifetime - (datetime.now() - _cache_timestamp).total_seconds()) / 60
+        ))
+        return _cache['research_data']
+    
     # First try to load from Firebase if environment variables are set
     if os.environ.get("FIREBASE_PROJECT_ID"):
         try:
-            print("Attempting to load data from Firebase...")
+            # Get collection name from env var or use the new grouped collection by default
+            collection_name = os.environ.get("FIREBASE_COLLECTION", "researchData_grouped")
+            print(f"Attempting to load data from Firebase collection '{collection_name}'...")
+            
             # Access Firestore and get data
             db = firestore.client()
-            docs = db.collection('researchData').where('isPubliclyViewable', '==', True).get()
             
-            # Convert to list of dictionaries
-            data_list = [doc.to_dict() for doc in docs]
+            # Try to get the summary document first to check structure
+            summary_ref = db.collection(collection_name).document('summary').get()
+            
+            if summary_ref.exists:
+                print("Loading data from grouped Firebase structure...")
+                # The data is using the new grouped structure
+                data_list = []
+                
+                # Get summary data
+                summary = summary_ref.to_dict()
+                
+                # First, try loading from categories which is most efficient
+                categories = summary.get('Categories', [])
+                if categories:
+                    for category in categories:
+                        category_doc = db.collection(collection_name).document(f'category_{category}').get()
+                        if category_doc.exists:
+                            category_data = category_doc.to_dict()
+                            for pathogen_name, pathogen_data in category_data.get('Pathogens', {}).items():
+                                for year, year_data in pathogen_data.get('Years', {}).items():
+                                    if year_data.get('Positive', 0) > 0 or year_data.get('Negative', 0) > 0:
+                                        data_list.append({
+                                            "Year": int(year),
+                                            "Pathogen": pathogen_name,
+                                            "Positive": year_data.get('Positive', 0),
+                                            "Negative": year_data.get('Negative', 0),
+                                            "Unknown": year_data.get('Unknown', 0),
+                                            "Category": category
+                                        })
+                else:
+                    # Fallback to loading from years if no categories
+                    year_range = summary.get('YearRange', [0, 0])
+                    for year in range(year_range[0], year_range[1] + 1):
+                        year_doc = db.collection(collection_name).document(f'year_{year}').get()
+                        if year_doc.exists:
+                            year_data = year_doc.to_dict()
+                            for pathogen, data in year_data.get('Pathogens', {}).items():
+                                if data.get('Positive', 0) > 0 or data.get('Negative', 0) > 0:
+                                    data_list.append({
+                                        "Year": year,
+                                        "Pathogen": pathogen,
+                                        "Positive": data.get('Positive', 0),
+                                        "Negative": data.get('Negative', 0),
+                                        "Unknown": data.get('Unknown', 0)
+                                    })
+            else:
+                # Fall back to the old structure if no summary document
+                print("Using original Firebase structure...")
+                docs = db.collection(collection_name).where('isPubliclyViewable', '==', True).get()
+                data_list = [doc.to_dict() for doc in docs]
             
             # If data is retrieved, return it as a DataFrame
             if data_list:
                 print(f"Successfully loaded {len(data_list)} records from Firebase")
-                return pd.DataFrame(data_list)
+                df = pd.DataFrame(data_list)
+                
+                # Store in cache
+                _cache['research_data'] = df
+                _cache_timestamp = datetime.now()
+                return df
             else:
                 print("No data found in Firebase. Falling back to local data.")
         except Exception as e:
@@ -102,13 +181,23 @@ def load_research_data():
                         })
         
         print("Successfully loaded data from local file")
-        return pd.DataFrame(data_list)
+        df = pd.DataFrame(data_list)
+        
+        # Store in cache
+        _cache['research_data'] = df
+        _cache_timestamp = datetime.now()
+        return df
     
     except Exception as e:
         print(f"Error loading local data: {e}")
         # Return sample data if there's an error
         print("Using sample data as fallback")
-        return get_sample_data()
+        sample_df = get_sample_data()
+        
+        # Store in cache
+        _cache['research_data'] = sample_df
+        _cache_timestamp = datetime.now()
+        return sample_df
 
 def get_sample_data():
     """
